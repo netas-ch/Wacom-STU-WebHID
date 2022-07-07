@@ -1,70 +1,114 @@
 # Wacom-STU-WebHID
 JavaScript library to use the Wacom STU series (540) Signature pad tablets with WebHID API on the browser, without external apps or drivers.
 
-![https://i.imgur.com/H5AoTEg.png](https://i.imgur.com/H5AoTEg.png)
+Library to connect the browser to a WACOM STU-540/k signature pad.
 
-Library to connect the browser to a WACOM STU-540/k signature pad. It should be compatible with other STU devices as stated on the compatibility matrix, but they are untested.
-Protocol is loosely reversed with wireshack but SDK contains most of the needed info to develop missing features. Issues and PRs are welcome.
-As WebHID relies on promises all the methods return as such. Use await or set the promise callback. Only most basic features are implemented.
+### class
+    /**
+     * add a event listener
+     * @param {String} eventName (hidConnect, hidDisconnect, penData)
+     * @param {Function} callbackFn
+     * @param {Object|null} context
+     * @returns {undefined}
+     */
+    on(eventName, callbackFn, context)
 
-### Demo app
-This library only offer a way to communicate with the tablet and does not provide image rendering / ink to graphics, however, a PoC-grade demo app is provided using the library. It supports image manipulation via canvas for the preview and upload of images to the tablet, and SVG polyline based renderer that somewhat supports pressure levels. The demo app has controls to test all the features implemented.
-#### [View online demo](https://amsspecialist.com/wacomstu/demo.html)  (Must have a wacom stu-540 connected by usb)
-#### [View video demo on youtube](https://youtu.be/Nkc5DdnVf1A)
+    /**
+     * Check is a usb hid from wacom vid+pid is present
+     * Note: WebHID needs a positive hid.requestDevice to be allowed to show here and on hid events. do use this for the first connect.
+     * @returns {Boolean} found a compatible device
+     */
+    async isAvailable()
 
-### Supported API
-`checkAvailable()` Check if a usb hid from wacom vid+pid is present
 
-`bool connect()` Connect to the device
+    /**
+     * Check if theres a device connected
+     * @returns {Boolean} connection status
+     */
+    isConnected()
 
-`object getTabletInfo()` Get an object containing info, capabilities and other data about the device
+    /**
+     * Connect to the device
+     * @returns {Boolean} success or failure
+     */
+    async connect()
 
-`setPenColorAndWidth(color,width)` Set pen color in "#RRGGBB" format. Width can be 0-5
+    /**
+     * Retrives general data from the device
+     * @returns {Object} info of the device
+     */
+    getTabletInfo()
 
-`setBacklight(intensity)` Set backlight intensity, can be 0-3.
+    /**
+     * returns the svg element to display live signature data on the screen
+     * @returns SVGElement
+     */
+    getSvgElement()
 
-`setBackgroundColor(color)` Set background color in '#RRGGBB' format, must clear screen to take effect
+    /**
+     * get the svg image of the signature.
+     * @returns {String} string containing an object URL that can be used to reference the contents of the specified source
+     */
+    getSvg()
 
-`setWritingArea(object)` Set writing area of the tablet. x1,y1=left top | x2,y2=right bottom
+    /**
+     * Set pen color
+     * @param {String} color color in '#RRGGBB' format
+     * @param {Number} width pen thickness, can be 0-3
+     */
+    async setPenColorAndWidth(color, width)
 
-`setWritingMode(mode)` Set writing mode (0: basic pen, 1: smooth pen with extra timing data)
+    /**
+     * Set backlight intensity, can be 0-3.
+     * Note: it seems its not good to call this frequently.
+     * See: http://developer-docs.wacom.com/faqs/docs/q-stu/stu-sdk-application#how-can-i-switch-the-stu-off-when-not-in-use
+     * @param {Number} intensity 0-3
+     */
+    async setBrightness(intensity)
 
-`setInking(enabled)` Enable or disable inking the screen. This does not stop events.
+    /**
+     * Set background color, must clear screen to take effect
+     * Note: it seems its not good to call this frequently
+     * @param {String} color color in '#RRGGBB' format
+     */
+    async setBackgroundColor(color)
 
-`clearScreen()` Clear screen to background color
+    /**
+     * Set writing area of the tablet.
+     * @param {Object} p format {x1:0,y1:0,x2:800,y2:480} where x1,y1=left top and x2,y2=right bottom
+     */
+    async setWritingArea(p)
 
-`setImage(imageData)` Send a raw image to the pad. Image must be BGR 24bpp 800x480.
+    /**
+     * Set writing mode
+     * @param {Number} mode 0: stroke with width from setting, 1: stroke with width from pressure
+     */
+    async setWritingMode(mode)
 
-`bool checkConnected()` Check if theres a device connected
+    /**
+     * Enable or disable inking the screen. This does not stop events.
+     * @param {Boolean} enabled Status of inking
+     */
+    async setInking(enabled)
 
-`onPenData(function)` Set the data callback for pen events. Callback recives an object:
-```js
-{
-        rdy: 	, // Returns TRUE if the pen is in proximity with the tablet
-        sw:  	, // Returns TRUE if the pen is in contact with the surface
-        press: 	, // Returns pen pressure in tablet units (0-1024)
-        cx: 	, // Point in X in tablet scale (/13.5)
-        cy: 	, // Point in Y in tablet scale (/13.5)
-		x:		, // Untransformed X
-		y:		, // Untransformed Y
-        time: 	, // (Only for writingMode=1) timestamp
-        seq:  	, // (Only for writingMode=1) incremental number
-}
-```
-`onHidChange(function)` Set the callback for HID connect and disconnect events from devices matching wacom stu. Callback function recives `("connect/disconnect", deviceObject)`
-### Usage:
-```js		
-const wacom = new wacomstu540()
-if (await wacom.connect()) {
-	//You are connected now to the tablet
-	wacom.onPenData(function(pen){
-	    // do something with pen.cx, pen.cy, pen.press, pen.sw...
-	})
-	await wacom.setWritingMode(1)
-	//...
-} else {
-	//Cannot connect, maybe device is already in use, or cancelled, or no device at all
-}
-```
-Note: Image updating on area and image on ROM are unimplemented yet, also special 540 features, like premade menus are also unimplemented. 
-See: http://developer-docs.wacom.com/faqs/docs/q-stu/stu-540-modes
+    /**
+     * Clear screen to background color
+     */
+    async clearScreen()
+
+    /**
+     * send a canvas to the pad. the canvas should have the dimension of the pad.
+     * @param {CanvasRenderingContext2D} ctx Canvas 2D
+     * @param {Number} offsetX offset to read the image data
+     * @param {Number} offsetY offset to read the image data
+     * @param {Boolean} drawToSvg draw image do svg
+     * @returns {Promise}
+     */
+    async setCanvas(ctx, offsetX=0, offsetY=0, drawToSvg=true)
+
+    /**
+     * Send a raw image to the pad.
+     * @param {Array} imageData Image must be BGR 24bpp 800x480.
+     */
+    async setImage(imageData)
+

@@ -1,246 +1,112 @@
-<style>
-*{font-family:sans-serif}body{background:linear-gradient(312deg,#364960,#81848c)}button{background:linear-gradient(45deg,#1e1e1e,transparent);border:1px solid #4c4c4c;filter:drop-shadow(0 2px 2px #2e2e2e);padding:5px 10px;color:#d9d9d9;border-radius:8px;cursor:pointer;margin:3px}table,td,tr{border:0}td{width:16.6667%}table{border-collapse:collapse;width:60%;margin:0 auto;margin-top:6px}.r{text-align:right;color:#e0e0e0;font-size:12px;font-family:monospace}#app{max-width:630px;background:#fff;padding:30px;margin:50px auto;border-radius:15px;filter:drop-shadow(0 4px 6px #00000077);text-align:center;color:#fff;background:linear-gradient(45deg,#111,#3d3d3d);color:#848484;font-size:12px}#appbg{position:absolute;top:65px;left:34px;background:linear-gradient(180deg,#1c1c1c,#1e1e1e);right:27px;bottom:190px;border-radius:12px;opacity:.5;mix-blend-mode:luminosity;border:1px solid #505050}#appcont{position:relative;zoom:.6;width:800px;height:480px;margin:0 auto}#radd{margin:8px}#wlogo{margin:14px;filter:invert(1);opacity:.5}#ssvvgg{position:absolute;top:0;left:0}canvas{border:1px solid #3b3b3b}
-</style>
-<div id="app">
-    <div id="appbg"></div>
-    <button onclick="connect()" style="width:100%;">CONNECT</button><br><input type="radio" id="radd" /><br>
-    <div id="appcont">
-        <canvas id="myCanvas" width="800" height="480"></canvas>
-        <svg width="800" height="480" id="ssvvgg"></svg>
-    </div>
-    <img src="https://wcm-cdn.wacom.com/-/media/graveyard/wacomdotcom/footer/wacom%20footer%20logo.png" id="wlogo" /><br />
-    <input type="file" id="ab" /> <button onclick="saveSvg(ssvvgg,'firma.svg')">SAVE SIGNATURE</button><br>
-    <button onclick="clearscreen()">CLEAR SCREEN</button>
-    <button onclick="sendimage()">SEND IMAGE</button>
-    <button onclick="img.src='wacom.png'; sendimage()">DEFAULT IMAGE</button><br>
-    <table>
-        <tbody>
-            <tr>
-                <td class="r">BACKGROUND</td>
-                <td><input id="colo" value="#000000" type="color" onchange="changebackground()" /></td>
-                <td class="r">BRIGHTNESS</td>
-                <td><input id="brig" value=3 min=0 max=3 step=1 type="range" onchange="adjustbrigtness()" /></td>
-                <td class="r">INK</td>
-                <td><input type="checkbox" id="imod" onchange="inkmode()" checked /></td>
-            </tr>
-            <tr>
-                <td class="r">PEN</td>
-                <td><input id="cola" value="#1566d1" type="color" onchange="changepen()" /></td>
-                <td class="r">DOT</td>
-                <td><input id="pens" value=1 min=0 max=5 step=1 type="range" onchange="changepen()" /></td>
-                <td class="r">MODE</td>
-                <td><input type="checkbox" id="wmod" onchange="writingmode()" checked /></td>
-            </tr>
-        </tbody>
-    </table><br><br>
-</div>
+<!DOCTYPE html>
+<!--
+Copyright © 2022 Netas Ltd., Switzerland.
+All rights reserved.
+@author  Lukas Buchs, lukas.buchs@netas.ch
+@license MIT
+@date    2022-07-12
+-->
+<html>
+    <head>
+        <title>Wacom STU 540 library Demo</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="WacomStu540.js"></script>
+        <script>
 
-<script src="wacomstu540.js"></script>
-<script>
-    // DEMO APP
+            window.onload = () => {
+                let wacom = new WacomStu540();
 
-    //Wacom tablet object
-    var wacom = new wacomstu540()
+                document.getElementById('canvasContainer').appendChild(wacom.getSvgElement());
 
-    //Defs
-    var image;
-    var poly;
-    var pen_state = false
-    var imgreq = false;
-    var lastPressure = 0.0
+                document.getElementById('isAvailable').onclick = () => { wacom.isAvailable().then((r)=> { console.log(r); }); };
+                document.getElementById('connect').onclick = () => { wacom.connect().then((r)=> { console.log(r); }); };
+                document.getElementById('clearScreen').onclick = () => { wacom.clearScreen().then((r)=> { console.log(r); }); };
+                document.getElementById('setInkingOn').onclick = () => { wacom.setInking(true).then((r)=> { console.log(r); }); };
+                document.getElementById('setInkingOff').onclick = () => { wacom.setInking(false).then((r)=> { console.log(r); }); };
+                document.getElementById('setWritingModeOn').onclick = () => { wacom.setWritingMode(1).then((r)=> { console.log(r); }); };
+                document.getElementById('setWritingModeOff').onclick = () => { wacom.setWritingMode(0).then((r)=> { console.log(r); }); };
+                document.getElementById('setBackgroundColorRed').onclick = () => { wacom.setBackgroundColor('FF0000').then((r)=> { console.log(r); }); };
+                document.getElementById('setBackgroundColorWhite').onclick = () => { wacom.setBackgroundColor('FFFFFF').then((r)=> { console.log(r); }); };
 
-    //Canvas stuff, used to create images and get it pixels
-    var canvas = document.getElementById('myCanvas')
-    var context = myCanvas.getContext("2d")
-    var img = new Image()
+                document.getElementById('setPenColorAndWidthR3').onclick = () => { wacom.setPenColorAndWidth('FF0000', 3).then((r)=> { console.log(r); }); };
+                document.getElementById('setPenColorAndWidthR2').onclick = () => { wacom.setPenColorAndWidth('FF0000', 2).then((r)=> { console.log(r); }); };
+                document.getElementById('setPenColorAndWidthR1').onclick = () => { wacom.setPenColorAndWidth('FF0000', 1).then((r)=> { console.log(r); }); };
+                document.getElementById('setPenColorAndWidthR0').onclick = () => { wacom.setPenColorAndWidth('FF0000', 0).then((r)=> { console.log(r); }); };
 
-    //Check for wacom tab connected now
-    wacom.checkAvailable().then(function (supp) {
-        if (!supp) app.style.opacity = 0.3
-    })
+                document.getElementById('setPenColorAndWidthB1').onclick = () => { wacom.setPenColorAndWidth('000000', 1).then((r)=> { console.log(r); }); };
+                document.getElementById('setPenColorAndWidthB0').onclick = () => { wacom.setPenColorAndWidth('000000', 0).then((r)=> { console.log(r); }); };
 
-    //Add hid listeners
-    wacom.onHidChange(function (e) {
-        if (e == 'connect')
-            app.style.opacity = 1
-        else {
-            wacom.device = null
-            app.style.opacity = 0.3
-        }
-    })
+                document.getElementById('getTabletInfo').onclick = () => { console.log(wacom.getTabletInfo()); };
+                document.getElementById('getSvg').onclick = () => { window.open(wacom.getSvg()); };
 
-    //Connect and setup initial state and events
-    async function connect() {
-        if (await wacom.connect()) {
-            await wacom.clearScreen()
-            //await wacom.setBackgroundColor(colo.value)
-            await wacom.setPenColorAndWidth(cola.value, pens.value)
-            await wacom.setWritingMode(1)
-            await wacom.setWritingArea({ x1: 0, y1: 0, x2: 800, y2: 480 })
-            await wacom.setInking(true)
-            wacom.onPenData(function (pen) {
-                pointevent(pen.press > 0 && imod.checked, pen.cx, pen.cy, pen.press)
-            })
-            addpoly()
-            img.onload = loadImg
-            setTimeout(function () {
-                img.src = "wacom.png"
-            }, 150)
-            radd.checked = true
-        }
-    }
+                document.getElementById('setWritingAreaFull').onclick = () => { console.log(wacom.setWritingArea({x1:0,y1:0,x2:800,y2:480})); };
+                document.getElementById('setWritingAreaHalf').onclick = () => { console.log(wacom.setWritingArea({x1:100,y1:100,x2:200,y2:200})); };
 
-    //Control actions
+                document.getElementById('setCanvas').onclick = () => {
+                    let canvas = document.createElement('canvas');
+                    document.body.appendChild(canvas);
+                    canvas.setAttribute('width', 800);
+                    canvas.setAttribute('height', 480);
 
-    async function inkmode() {
-        await wacom.setInking(imod.checked == 1)
-    }
-    async function writingmode() {
-        await wacom.setWritingMode(wmod.checked == 1 ? 1 : 0)
-    }
-    async function clearscreen() {
-        await wacom.clearScreen()
-        context.fillStyle = colo.value;
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        ssvvgg.innerHTML = ''
-    }
-    async function changebackground() {
-        await wacom.setBackgroundColor(colo.value)
-        await clearscreen()
-    }
-    async function adjustbrigtness() {
-        console.log('do not call this often')
-        await wacom.setBacklight(brig.value)
-    }
-    async function changepen() {
-        await wacom.setPenColorAndWidth(cola.value, pens.value)
-    }
-    async function sendimage() {
-        await wacom.setImage(image)
-        imgreq = false
-        ssvvgg.innerHTML = ''
-        await inkmode()
-    }
+                    let ctx=canvas.getContext('2d', {alpha: false});
 
+                    // without alpha is the default black, fill with white rect
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, 800, 480);
+                    ctx.lineWidth = 10;
 
+                    // Wall
+                    ctx.strokeRect(75, 140, 150, 110);
 
-    //Pressure ink rendering helpers
+                    // Door
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(130, 190, 40, 60);
 
-    //Obtain difference between 2 numbers
-    function pressdiff(a, b) {
-        if (a > b)  return a - b
-        else return b - a
-    }
-    //Transform stroke according the pressure level
-    function makestroke(v) {
-        let pf = lastPressure + 0.5  //Shift scale (0.5-1.5) so it does magnification and reduction
-        return Math.max(v * pf, 0.5) //Ensure some width on the product
-    }
-    //Add a polyline to the chain
-    function addpoly() {
-        poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-        poly.setAttributeNS(null, "style", "fill:none;stroke:" + cola.value + ";stroke-width:" + makestroke(parseInt(pens.value) + 1) + ";")
-        ssvvgg.append(poly)
-    }
-    //Adds a point to the last polyline
-    function polypoint(x, y) {
-        var point = ssvvgg.createSVGPoint()
-        point.x = x
-        point.y = y
-        poly.points.appendItem(point)
-    }
+                    // Roof
+                    ctx.beginPath();
+                    ctx.moveTo(50, 140);
+                    ctx.lineTo(150, 60);
+                    ctx.lineTo(250, 140);
+                    ctx.closePath();
+                    ctx.stroke();
 
-    //Pen event handler
-    async function pointevent(z, x, y, p) {
-        // State just changed?
-        if (z != pen_state) {
-            if (z) {
-                addpoly()
-                //Handle repeat "button" zone
-                if (x > 580 && y < 50 && !imgreq) {
-                    //Disable inking and load bg image, inking is reenabled on image load
-                    await wacom.setInking(false)
-                    setTimeout(sendimage, 10)
-                    imgreq = true
-                }
-            } else polypoint(x, y) //Finish the pointlist
-            pen_state = z
-        }
-        //Is touching screen?
-        if (z) {
-            //check if need to create new polyline with better fit stroke
-            if (pressdiff(p, lastPressure) > 0.02) {
-                //Add a connection point to the last polyline
-                polypoint(x, y)
-                lastPressure = p
-                addpoly()
+                    wacom.setCanvas(ctx);
+                };
             }
-            //Add the point to the polyline
-            polypoint(x, y)
-        }
-    }
-
-    //Callback for image loading. Manipulates the image and converts to 24.BGR from stretched canvas
-    async function loadImg() {
-        context.drawImage(img, 0, 0, 800, 480);
-        if (!img.src.includes("wacom.png")) {
-            //Unrestrict inking area
-            await wacom.setWritingArea({ x1: 0, y1: 0, x2: 800, y2: 480 })
-        } else {
-            //Restrict inking area
-            await wacom.setWritingArea({ x1: 16, y1: 50, x2: 800 - 16, y2: 480 - 16 })
-            //Add text to image
-            context.font = "22px Arial";
-            var date = new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-            context.fillText("Signed in XXXXXXXX at " + date, 130, 450);
-        }
-        //Obtain image pixels
-        var imageData = context.getImageData(0, 0, 800, 480)
-        //Remap pixels to BGR 24bpp
-        const rgb24 = new Uint8Array((imageData.data.length / 4) * 3)
-        var i = 0, j = 0;
-        while (i < imageData.data.length) {
-            //Remap pixels, discard alpha
-            rgb24[j++] = imageData.data[i + 2]
-            rgb24[j++] = imageData.data[i + 1]
-            rgb24[j++] = imageData.data[i + 0]
-            i += 4
-        }
-        image = rgb24
-        await sendimage() //Send the image to the tablet
-    }
-
-    //Image file loading with control
-    ab.onchange = function (evt) {
-        var files = evt.target.files
-        var file = files[0]
-        if (file == null) return
-        //Check for image
-        if (file.type.match('image.*')) {
-            var reader = new FileReader()
-            reader.readAsDataURL(file)
-            reader.onload = function (evt) {
-                if (evt.target.readyState == FileReader.DONE) {
-                    img.src = evt.target.result
-                    img.onload = loadImg
-                }
+        </script>
+        <style>
+            #canvasContainer > svg, body canvas {
+                width: 800px;
+                height: 480px;
+                border: 1px solid black;
+                margin: 10px 0;
             }
-        } else alert("not an image")
-    }
+        </style>
+    </head>
+    <body>
+        <div><button id="isAvailable">isAvailable</button></div>
+        <div><button id="connect">connect</button></div>
+        <div><button id="getTabletInfo">getTabletInfo</button></div>
+        <div><button id="clearScreen">clearScreen</button></div>
+        <div><button id="setBackgroundColorRed">setBackgroundColor Red</button></div>
+        <div><button id="setBackgroundColorWhite">setBackgroundColor White</button></div>
+        <div><button id="setInkingOn">setInking ON</button></div>
+        <div><button id="setInkingOff">setInking OFF</button></div>
+        <div><button id="setWritingModeOn">setWritingMode 1</button></div>
+        <div><button id="setWritingModeOff">setWritingMode 0</button></div>
+        <div><button id="setPenColorAndWidthR3">setPenColorAndWidth Red 3</button></div>
+        <div><button id="setPenColorAndWidthR2">setPenColorAndWidth Red 2</button></div>
+        <div><button id="setPenColorAndWidthR1">setPenColorAndWidth Red 1</button></div>
+        <div><button id="setPenColorAndWidthR0">setPenColorAndWidth Red 0</button></div>
+        <div><button id="setPenColorAndWidthB1">setPenColorAndWidth Black 1</button></div>
+        <div><button id="setPenColorAndWidthB0">setPenColorAndWidth Black 0</button></div>
+        <div><button id="setWritingAreaFull">setWritingArea Full</button></div>
+        <div><button id="setWritingAreaHalf">setWritingArea Half</button></div>
+        <div><button id="setCanvas">setCanvas</button></div>
+        <div><button id="getSvg">getSvg</button></div>
+        <div id="canvasContainer">
 
-    //Helper to download the signature SVG
-    function saveSvg(svgEl, name) {
-        svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg")
-        var svgData = svgEl.outerHTML
-        var preface = '<?xml version="1.0" standalone="no"?>\r\n'
-        var svgBlob = new Blob([preface, svgData], { type: "image/svg+xml;charset=utf-8" })
-        var svgUrl = URL.createObjectURL(svgBlob)
-        var downloadLink = document.createElement("a")
-        downloadLink.href = svgUrl
-        downloadLink.download = name
-        document.body.appendChild(downloadLink)
-        downloadLink.click()
-        document.body.removeChild(downloadLink)
-    }
-
-</script>
+        </div>
+    </body>
+</html>
