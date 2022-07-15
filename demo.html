@@ -15,17 +15,29 @@ All rights reserved.
         <script>
 
             window.onload = () => {
-                let wacom = new WacomStu540();
+                let wacom = null;
 
-                document.getElementById('canvasContainer').appendChild(wacom.getSvgElement());
+                try {
+                    wacom = new WacomStu540();
+                    document.getElementById('canvasContainer').appendChild(wacom.getSvgElement());
+
+                } catch (e) {
+                    let err = document.createElement('h2');
+                    err.style.color = 'red';
+                    err.textContent = e.toLocaleString();
+                    document.body.appendChild(err);
+                }
 
                 document.getElementById('isAvailable').onclick = () => { wacom.isAvailable().then((r)=> { console.log(r); }); };
                 document.getElementById('connect').onclick = () => { wacom.connect().then((r)=> { console.log(r); }); };
                 document.getElementById('clearScreen').onclick = () => { wacom.clearScreen().then((r)=> { console.log(r); }); };
+
                 document.getElementById('setInkingOn').onclick = () => { wacom.setInking(true).then((r)=> { console.log(r); }); };
                 document.getElementById('setInkingOff').onclick = () => { wacom.setInking(false).then((r)=> { console.log(r); }); };
+
                 document.getElementById('setWritingModeOn').onclick = () => { wacom.setWritingMode(1).then((r)=> { console.log(r); }); };
                 document.getElementById('setWritingModeOff').onclick = () => { wacom.setWritingMode(0).then((r)=> { console.log(r); }); };
+
                 document.getElementById('setBackgroundColorRed').onclick = () => { wacom.setBackgroundColor('FF0000').then((r)=> { console.log(r); }); };
                 document.getElementById('setBackgroundColorWhite').onclick = () => { wacom.setBackgroundColor('FFFFFF').then((r)=> { console.log(r); }); };
 
@@ -44,38 +56,44 @@ All rights reserved.
                 document.getElementById('setWritingAreaHalf').onclick = () => { console.log(wacom.setWritingArea({x1:100,y1:100,x2:200,y2:200})); };
 
                 document.getElementById('setCanvas').onclick = () => {
-                    let canvas = document.createElement('canvas');
-                    document.body.appendChild(canvas);
-                    canvas.setAttribute('width', 800);
-                    canvas.setAttribute('height', 480);
-
+                    
+                    let canvas = document.getElementById('mycanvas');
+                    if (!canvas) {
+                        canvas = document.createElement('canvas');
+                       canvas.id = 'mycanvas';
+                       document.body.appendChild(canvas);
+                       canvas.setAttribute('width', 800);
+                       canvas.setAttribute('height', 480);
+                    }
                     let ctx=canvas.getContext('2d', {alpha: false});
 
                     // without alpha is the default black, fill with white rect
                     ctx.fillStyle = 'white';
                     ctx.fillRect(0, 0, 800, 480);
-                    ctx.lineWidth = 10;
+                    ctx.lineWidth = 2;
 
-                    // Wall
-                    ctx.strokeRect(75, 140, 150, 110);
-
-                    // Door
-                    ctx.fillStyle = 'black';
-                    ctx.fillRect(130, 190, 40, 60);
-
-                    // Roof
+                    // sign line
                     ctx.beginPath();
-                    ctx.moveTo(50, 140);
-                    ctx.lineTo(150, 60);
-                    ctx.lineTo(250, 140);
+                    ctx.moveTo(50, 400);
+                    ctx.lineTo(750, 400);
                     ctx.closePath();
                     ctx.stroke();
+
+                    let dateStr = (new Date()).toLocaleString(navigator.language, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    ctx.font = '30px sans-serif';
+                    ctx.fillStyle = 'black';
+                    ctx.fillText(dateStr, 50, 100);
+                    ctx.fillText('Signature', 50, 430);
 
                     wacom.setCanvas(ctx);
                 };
             }
         </script>
         <style>
+            * {
+                font-family: sans-serif;
+                margin-bottom: 2px;
+            }
             #canvasContainer > svg, body canvas {
                 width: 800px;
                 height: 480px;
@@ -85,6 +103,8 @@ All rights reserved.
         </style>
     </head>
     <body>
+        <h1><a href="https://github.com/netas-ch/Wacom-STU-WebHID" target="_blank">Wacom STU 540 Browser Library</a></h1>
+        <p>&nbsp;</p>
         <div><button id="isAvailable">isAvailable</button></div>
         <div><button id="connect">connect</button></div>
         <div><button id="getTabletInfo">getTabletInfo</button></div>
@@ -105,8 +125,6 @@ All rights reserved.
         <div><button id="setWritingAreaHalf">setWritingArea Half</button></div>
         <div><button id="setCanvas">setCanvas</button></div>
         <div><button id="getSvg">getSvg</button></div>
-        <div id="canvasContainer">
-
-        </div>
+        <div id="canvasContainer"></div>
     </body>
 </html>
