@@ -51,12 +51,13 @@ All rights reserved.
 
                 document.getElementById('getTabletInfo').onclick = () => { console.log(wacom.getTabletInfo()); };
                 document.getElementById('getSvg').onclick = () => { window.open(wacom.getSvg()); };
+                document.getElementById('getSvgSigned').onclick = async () => { window.open(await wacom.getSvgSigned()); };
 
                 document.getElementById('setWritingAreaFull').onclick = () => { console.log(wacom.setWritingArea({x1:0,y1:0,x2:800,y2:480})); };
                 document.getElementById('setWritingAreaHalf').onclick = () => { console.log(wacom.setWritingArea({x1:100,y1:100,x2:200,y2:200})); };
 
                 document.getElementById('setCanvas').onclick = () => {
-                    
+
                     let canvas = document.getElementById('mycanvas');
                     if (!canvas) {
                         canvas = document.createElement('canvas');
@@ -125,6 +126,7 @@ All rights reserved.
         <div><button id="setWritingAreaHalf">setWritingArea Half</button></div>
         <div><button id="setCanvas">setCanvas</button></div>
         <div><button id="getSvg">getSvg</button></div>
+        <div><button id="getSvgSigned">getSvgSigned</button></div>
         <div id="canvasContainer"></div>
     </body>
 </html>

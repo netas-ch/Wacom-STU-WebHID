@@ -32,30 +32,31 @@ class WacomStu540 {
          * Device configuration, information and capabilities
          */
         this.#config = {
-            chunkSize       : 253,
-            vid             : 0x56A,
-            pid             : 0xA8,
-            imageFormat24BGR: 0x04,
-            width           : 800,
-            height          : 480,
-            scaleFactor     : 13.5,
-            pressureFactor  : 1023,
-            refreshRate     : 0,
-            tabletWidth     : 0,
-            tabletHeight    : 0,
+            chunkSize           : 253,
+            vid                 : 0x56A,
+            pid                 : 0xA8,
+            imageFormat24BGR    : 0x04,
+            width               : null,
+            height              : null,
+            scaleFactorX        : null,
+            scaleFactorY        : null,
+            tabletMaxPressure   : null,
+            maxReportRate       : null,
+            tabletMaxX          : null,
+            tabletMaxY          : null,
 
-            penColor        : null, // [r, g, b]
-            penWidth        : null,
-            backgroundColor : null, // [r, g, b]
-            brightness      : null,
+            penColor            : null, // [r, g, b]
+            penWidth            : null,
+            backgroundColor     : null, // [r, g, b]
+            brightness          : null,
 
-            inkMode         : null,
-            writingMode     : null,
-            writingArea     : null, // [x1, x2
+            inkMode             : null,
+            writingMode         : null,
+            writingArea         : null, // [x1, x2
 
-            deviceName      : null,
-            firmware        : null,
-            eSerial         : null
+            deviceName          : null,
+            firmware            : null,
+            eSerial             : null
         };
 
         /**
@@ -91,7 +92,6 @@ class WacomStu540 {
         // svg element
         this.#svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         this.#svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-        this.#svgElement.setAttribute('viewBox', '0 0 ' + this.#config.width + ' ' + this.#config.height);
 
         // current svg polyline
         this.#svgPolyLine = null;
@@ -197,13 +197,14 @@ class WacomStu540 {
 
         // Read info and capabilities from device and fill the data
         let dv = await this.#readData(this.#command.capability);
-        this.#config.tabletWidth = dv.getUint16(1);
-        this.#config.tabletHeight = dv.getUint16(3);
-        this.#config.pressureFactor = dv.getUint16(5);
+        this.#config.tabletMaxX = dv.getUint16(1);
+        this.#config.tabletMaxY = dv.getUint16(3);
+        this.#config.tabletMaxPressure = dv.getUint16(5);
         this.#config.width = dv.getUint16(7);
         this.#config.height = dv.getUint16(9);
-        this.#config.refreshRate = dv.getUint8(11);
-        this.#config.scaleFactor = this.#config.tabletWidth / this.#config.width;
+        this.#config.maxReportRate = dv.getUint8(11);
+        this.#config.scaleFactorX = this.#config.tabletMaxX / this.#config.width;
+        this.#config.scaleFactorY = this.#config.tabletMaxY / this.#config.height;
 
         // information
         dv = await this.#readData(this.#command.information);
@@ -240,6 +241,9 @@ class WacomStu540 {
         dv = await this.#readData(this.#command.writingArea);
         this.#config.writingArea = [dv.getUint16(1, true), dv.getUint16(3, true), dv.getUint16(5, true), dv.getUint16(7, true)];
 
+        // set the svg viewbox to width & height
+        this.#svgElement.setAttribute('viewBox', '0 0 ' + this.#config.width + ' ' + this.#config.height);
+
         return true;
     }
 
@@ -265,15 +269,64 @@ class WacomStu540 {
      * @returns {String} string containing an object URL that can be used to reference the contents of the specified source
      */
     getSvg() {
-        let xmlHead = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>' + "\n";
+        return URL.createObjectURL(this.#getSvgBlob());
+    }
 
-        // add raw infos to svg comment
-        let deviceInfo = "\n" + '<!-- device info: ' + JSON.stringify(this.getTabletInfo()) + "-->\n";
-        let pathInfo = "\n" + '<!-- signature path: ' + JSON.stringify(this.#signaturePath) + "-->\n";
+    /**
+     * Creates a signature over the svg and append it in a comment.
+     * @param {CryptoKey|null} privateKey private keyfor signing
+     * @param {CryptoKey|null} publicKey to check sign
+     * @param {Object|String|null} algorithm (default: ECDSA over P-384 curve)
+     * @returns {Promise}
+     */
+    async getSvgSigned(privateKey=null, publicKey=null, algorithm=null) {
+        const blob = this.#getSvgBlob(), data = await blob.arrayBuffer();
 
-        // create blob
-        let svgBlob = new Blob([xmlHead, this.#svgElement.outerHTML, deviceInfo, pathInfo], {type: 'image/svg+xml'});
-        return URL.createObjectURL(svgBlob);
+        if (privateKey !== null && !(privateKey instanceof CryptoKey)) {
+            throw new Error('invalid key for signing svg, not CryptoKey');
+        }
+
+        if (algorithm === null) {
+            algorithm = {
+                name: 'ECDSA',
+                hash: {name: 'SHA-384'},
+                namedCurve: 'P-384'
+            };
+        }
+
+        // generate a key pair
+        if (privateKey === null) {
+            const keyPair = await window.crypto.subtle.generateKey(algorithm, true, ["sign", "verify"]);
+            privateKey = keyPair.privateKey;
+            publicKey = keyPair.publicKey;
+        }
+
+        // create signature
+        let sig = await window.crypto.subtle.sign(algorithm, privateKey, data);
+
+        let signatureBlock = '<!-- ' + "\n";
+
+        // append public key
+        if (publicKey) {
+            signatureBlock += 'public key: ';
+            let pk = await window.crypto.subtle.exportKey('spki', publicKey);
+            let sigBytes = new Uint8Array(pk);
+            for (let i = 0; i < sigBytes.length; i++) {
+                signatureBlock += sigBytes[i].toString(16).padStart(2, '0');
+            }
+            signatureBlock += "\n";
+        }
+
+        // append signature
+        signatureBlock += 'signature: ';
+        let sigBytes = new Uint8Array(sig);
+        for (let i = 0; i < sigBytes.length; i++) {
+            signatureBlock += sigBytes[i].toString(16).padStart(2, '0');
+        }
+        signatureBlock += "\n-->";
+
+        const b = new Blob([blob, signatureBlock], {type: 'image/svg+xml'});
+        return URL.createObjectURL(b);
     }
 
     /**
@@ -500,12 +553,13 @@ class WacomStu540 {
      *      rdy:     Returns TRUE if the pen is in proximity with the tablet
      *      sw:      Returns TRUE if the pen is in contact with the surface
      *      press:   Returns pen pressure in tablet units (0-1024)
-     *      cx:      Transformed x
-     *      cy:      Transformed y
-     *      x:       Point in X in tablet scale (*13.5)
-     *      y:       Point in Y in tablet scale (*13.5)
-     *      time:    (Only for writingMode=1) timestamp
-     *      seq:     (Only for writingMode=1) incremental number
+     *      cpress:  Returns pen pressure 0 ... 1
+     *      cx:      x in screen pixel
+     *      cy:      y in screen pixel
+     *      x:       Point x in tablet scale
+     *      y:       Point y in tablet scale
+     *      time:    timestamp
+     *      seq:     incremental number
      */
 
 
@@ -532,20 +586,19 @@ class WacomStu540 {
         // See WacomGSS_ReportHandlerFunctionTable on the SDK. just read onPenData and onPenDataTimeCountSequence, depending
         // of the write mode used (0/1). Start/End capture toggles encryption which im not in the mood of implement, so not using it.
         if (event.reportId === this.#command.penData || event.reportId === this.#command.penDataTiming) {
+
             let packet = {
-                rdy: (event.data.getUint8(0) & (1 << 0)) !== 0, // Check 1st bit
-                sw: (event.data.getUint8(0) & (1 << 1)) !== 0, // Check 2nd bit
-                cx: Math.trunc(event.data.getUint16(2) / this.#config.scaleFactor), // Truncated transformed logic units
-                cy: Math.trunc(event.data.getUint16(4) / this.#config.scaleFactor), // Truncated transformed logic units
-                x: event.data.getUint16(2), // Tablet units
-                y: event.data.getUint16(4), // Tablet units
-                press: 0,
+                rdy: (event.data.getUint16(0) & 0x8000) !== 0,                              // true if pen is in proximity of the tablet
+                sw: (event.data.getUint16(0) & 0x1000) !== 0,                               // true if pen is in contact with tablet
+                press: (event.data.getUint16(0) & 0x3FF),                                   // absolute value from device
+                cpress: (event.data.getUint16(0) & 0x3FF) / this.#config.tabletMaxPressure, // relative value 0 ... 1
+                cx: Math.round(event.data.getUint16(2) / this.#config.scaleFactorX),        // relative to screen pixels
+                cy: Math.round(event.data.getUint16(4) / this.#config.scaleFactorY),        // relative to screen pixels
+                x: event.data.getUint16(2),                                                 // Tablet units
+                y: event.data.getUint16(4),                                                 // Tablet units
                 seq: null,
                 time: null
             };
-
-            event.data.setUint8(0, event.data.getUint8(0) & 0x0F); // Remove MSB of the 1st byte, todo: maybe i should only clear bits 1,2?
-            packet.press = event.data.getUint16(0) / this.#config.pressureFactor; // Read now as short with cleared MSB
 
             if (event.reportId === this.#command.penDataTiming) {
                 packet.time = event.data.getUint16(6); // Extra timing
@@ -555,12 +608,26 @@ class WacomStu540 {
             // signature stack
             this.#signaturePath.push(packet);
 
-            // draw last point
+            // draw last added point
             this.#drawSignaturePathToCanvas(this.#signaturePath.length - 1);
 
             // callback
             this.#raiseEvent('penData', [packet]);
         }
+    }
+
+    /**
+     * create a blob of the svg
+     * @returns {Blob}
+     */
+    #getSvgBlob() {
+        let xmlHead = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>' + "\n";
+
+        // add raw infos to svg comment
+        let rawData = "\n" + '<!-- raw: ' + JSON.stringify({device: this.getTabletInfo(), path: this.#signaturePath}) + "-->\n";
+
+        // create blob
+        return new Blob([xmlHead, this.#svgElement.outerHTML, rawData], {type: 'image/svg+xml'});
     }
 
     /**
@@ -583,12 +650,12 @@ class WacomStu540 {
         for (let i=fromOffset; i < this.#signaturePath.length; i++) {
             let point = this.#signaturePath[i], prevPoint = i > 0 ? this.#signaturePath[i-1] : null;
 
-            if (point.press > 0 && this.#config.inkMode && this.#isInWritingArea(point.cx, point.cy)) {
+            if (point.rdy && point.sw && this.#config.inkMode && this.#isInWritingArea(point.cx, point.cy)) {
                 if (!this.#svgPolyLine) {
                     this.#startPolyLine();
 
                 // if the pressure difference is high, we start a new polyline with different stroke-width
-                } else if (prevPoint && (Math.abs(point.press - prevPoint.press) > 0.02)) {
+                } else if (prevPoint && (Math.abs(point.cpress - prevPoint.cpress) > 0.02)) {
                     this.#addPolyPoint(point.cx, point.cy);
                     this.#startPolyLine();
                 }
@@ -636,7 +703,7 @@ class WacomStu540 {
 
         // writing mode 1: stroke width from Pressure
         if (this.#signaturePath.length > 0 && this.#config.writingMode === 1) {
-            let lastPressure = this.#signaturePath[this.#signaturePath.length-1].press;
+            let lastPressure = this.#signaturePath[this.#signaturePath.length-1].cpress;
             strokeWidth = 1 + (lastPressure * 1.5);
 
         } else {
