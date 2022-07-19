@@ -117,6 +117,20 @@ class WacomStu540 {
 
     /**
      * add a event listener
+     * penData-Event:
+     * -------------------------------------------------------------------------
+     *      rdy:     Returns TRUE if the pen is in proximity with the tablet
+     *      sw:      Returns TRUE if the pen is in contact with the surface
+     *      press:   Returns pen pressure in tablet units (0-1024)
+     *      cpress:  Returns pen pressure 0 ... 1
+     *      cx:      x in screen pixel
+     *      cy:      y in screen pixel
+     *      x:       Point x in tablet scale
+     *      y:       Point y in tablet scale
+     *      time:    timestamp
+     *      seq:     incremental number
+     *
+     *
      * @param {String} eventName (hidConnect, hidDisconnect, penData)
      * @param {Function} callbackFn
      * @param {Object|null} context
@@ -126,9 +140,25 @@ class WacomStu540 {
         this.#events.push({eventName: eventName, callbackFn: callbackFn, context: context});
     }
 
+
+    /**
+     * Remove a event from the stack. pass null to remove all.
+     * @param {String|null} eventName
+     * @param {Function|null} callbackFn
+     * @param {Object|null} context
+     * @returns {undefined}
+     */
+    un(eventName=null, callbackFn=null, context=null) {
+        this.#events = this.#events.filter((e) => {
+            return ((eventName === e.eventName || eventName === null)
+                    && (callbackFn === e.callbackFn || callbackFn === null)
+                    && (context === e.context || context === null)) ? false : true;
+        });
+    }
+
     /**
      * Check is a usb hid from wacom vid+pid is present
-     * Note: WebHID needs a positive hid.requestDevice to be allowed to show here and on hid events. do use this for the first connect.
+     * Note: WebHID needs a positive hid.requestDevice to be allowed to show here and on hid events. Do not use this for the first connection.
      * @returns {Boolean} found a compatible device
      */
     async isAvailable() {
@@ -338,7 +368,7 @@ class WacomStu540 {
         if (!this.isConnected()) {
             throw new Error('device not connected');
         }
-        if ([0,1,2,3].indexOf(mode) === -1) {
+        if ([0,1,2,3].indexOf(width) === -1) {
             throw new Error('invalid value for setPenColorAndWidth width');
         }
 
@@ -362,6 +392,10 @@ class WacomStu540 {
     async setBrightness(intensity) {
         if (!this.isConnected()) {
             throw new Error('device not connected');
+        }
+
+        if ([0,1,2,3].indexOf(intensity) === -1) {
+            throw new Error('invalid value for setBrightness intensity');
         }
 
         // Check if device already has this value, to avoid unnecessary writes
@@ -541,27 +575,6 @@ class WacomStu540 {
         // clear current signature path
         this.#clearSignatureData();
     }
-
-    // -------------------------------------------------
-    // event handlers
-    // -------------------------------------------------
-
-    /**
-     * Set the data callback for pen events.
-     * @param {Function} func Callback function recives an object:
-     * -------------------------------------------------------------------------
-     *      rdy:     Returns TRUE if the pen is in proximity with the tablet
-     *      sw:      Returns TRUE if the pen is in contact with the surface
-     *      press:   Returns pen pressure in tablet units (0-1024)
-     *      cpress:  Returns pen pressure 0 ... 1
-     *      cx:      x in screen pixel
-     *      cy:      y in screen pixel
-     *      x:       Point x in tablet scale
-     *      y:       Point y in tablet scale
-     *      time:    timestamp
-     *      seq:     incremental number
-     */
-
 
     // -------------------------------------------------
     // private methods
