@@ -50,8 +50,8 @@ All rights reserved.
                 document.getElementById('setPenColorAndWidthB0').onclick = () => { wacom.setPenColorAndWidth('000000', 0).then((r)=> { console.log(r); }); };
 
                 document.getElementById('getTabletInfo').onclick = () => { console.log(wacom.getTabletInfo()); };
-                document.getElementById('getSvg').onclick = () => { window.open(wacom.getSvg()); };
-                document.getElementById('getSvgSigned').onclick = async () => { window.open(await wacom.getSvgSigned()); };
+                document.getElementById('getSvg').onclick = () => { window.open(wacom.getSvg(true)); };
+                document.getElementById('getSvgSigned').onclick = async () => { window.open(await wacom.getSvgSigned(null,null,null,true)); };
 
                 document.getElementById('setWritingAreaFull').onclick = () => { console.log(wacom.setWritingArea({x1:0,y1:0,x2:800,y2:480})); };
                 document.getElementById('setWritingAreaHalf').onclick = () => { console.log(wacom.setWritingArea({x1:100,y1:100,x2:200,y2:200})); };

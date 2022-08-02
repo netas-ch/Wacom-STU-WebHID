@@ -20,6 +20,7 @@ class WacomStu540 {
     #svgElement;
     #svgPolyLine;
     #events;
+    #deviceIsSending;
 
     constructor() {
 
@@ -88,6 +89,9 @@ class WacomStu540 {
 
         // stored path of the signature
         this.#signaturePath = [];
+
+        // prohibit double sending
+        this.#deviceIsSending = false;
 
         // svg element
         this.#svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -272,7 +276,10 @@ class WacomStu540 {
         this.#config.writingArea = [dv.getUint16(1, true), dv.getUint16(3, true), dv.getUint16(5, true), dv.getUint16(7, true)];
 
         // set the svg viewbox to width & height
+        this.#svgElement.setAttribute('version', '2.0');
         this.#svgElement.setAttribute('viewBox', '0 0 ' + this.#config.width + ' ' + this.#config.height);
+        this.#svgElement.setAttribute('width', this.#config.width + 'px');
+        this.#svgElement.setAttribute('height', this.#config.height + 'px');
 
         return true;
     }
@@ -282,8 +289,11 @@ class WacomStu540 {
      * @returns {Object} info of the device
      */
     getTabletInfo() {
-        // return clone
-        return Object.assign({connected: this.isConnected()}, this.#config);
+        // return clone, add time and connection
+        return Object.assign({
+            connected: this.isConnected(),
+            timestamp: Date.now()
+        }, this.#config);
     }
 
     /**
@@ -296,20 +306,26 @@ class WacomStu540 {
 
     /**
      * get the svg image of the signature.
-     * @returns {String} string containing an object URL that can be used to reference the contents of the specified source
+     * @param {Boolean} asUrl true to return a string containing an object URL that can be used to reference the contents of the specified source
+     * @returns {Blob|String}
      */
-    getSvg() {
-        return URL.createObjectURL(this.#getSvgBlob());
+    getSvg(asUrl=false) {
+        if (asUrl) {
+            return URL.createObjectURL(this.#getSvgBlob());
+        } else {
+            return this.#getSvgBlob();
+        }
     }
 
     /**
      * Creates a signature over the svg and append it in a comment.
      * @param {CryptoKey|null} privateKey private keyfor signing
-     * @param {CryptoKey|null} publicKey to check sign
+     * @param {CryptoKey|String|null} publicKey or Certificate to check sign
      * @param {Object|String|null} algorithm (default: ECDSA over P-384 curve)
-     * @returns {Promise}
+     * @param {Boolean} asUrl true to return a string containing an object URL that can be used to reference the contents of the specified source
+     * @returns {Blob|String}
      */
-    async getSvgSigned(privateKey=null, publicKey=null, algorithm=null) {
+    async getSvgSigned(privateKey=null, publicKey=null, algorithm=null, asUrl=false) {
         const blob = this.#getSvgBlob(), data = await blob.arrayBuffer();
 
         if (privateKey !== null && !(privateKey instanceof CryptoKey)) {
@@ -337,7 +353,7 @@ class WacomStu540 {
         let signatureBlock = '<!-- ' + "\n";
 
         // append public key
-        if (publicKey) {
+        if (publicKey && publicKey instanceof CryptoKey) {
             signatureBlock += 'public key: ';
             let pk = await window.crypto.subtle.exportKey('spki', publicKey);
             let sigBytes = new Uint8Array(pk);
@@ -345,7 +361,12 @@ class WacomStu540 {
                 signatureBlock += sigBytes[i].toString(16).padStart(2, '0');
             }
             signatureBlock += "\n";
+
+        // or certificate
+        } else  if (publicKey && typeof publicKey === 'string') {
+            signatureBlock += 'certificate: ' + publicKey + "\n";
         }
+
 
         // append signature
         signatureBlock += 'signature: ';
@@ -356,7 +377,29 @@ class WacomStu540 {
         signatureBlock += "\n-->";
 
         const b = new Blob([blob, signatureBlock], {type: 'image/svg+xml'});
-        return URL.createObjectURL(b);
+        if (asUrl) {
+            return URL.createObjectURL(b);
+        } else {
+            return b;
+        }
+    }
+
+    /**
+     * Check if there is a signature stored.
+     * @param {Boolean} withTouchingDevice false to not check if the screen was touched
+     * @returns {Boolean}
+     */
+    hasSignatureData(withTouchingDevice=true) {
+        if (withTouchingDevice) {
+            for (let i = 0; i < this.#signaturePath.length; i++) {
+                if (this.#signaturePath[i].sw) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            return this.#signaturePath.length > 0;
+        }
     }
 
     /**
@@ -534,6 +577,9 @@ class WacomStu540 {
             i += 4;
         }
 
+        // get image as data url to paint after to the canvas
+        let dataUrl = drawToSvg ? ctx.canvas.toDataURL() : null;
+
         await this.setImage(rgb24);
 
         // draw image to svg
@@ -543,7 +589,7 @@ class WacomStu540 {
             svgImage.setAttribute('y', 0);
             svgImage.setAttribute('width', this.#config.width);
             svgImage.setAttribute('height', this.#config.height);
-            svgImage.setAttribute('href', ctx.canvas.toDataURL());
+            svgImage.setAttribute('href', dataUrl);
             this.#svgElement.append(svgImage);
         }
     }
@@ -561,6 +607,18 @@ class WacomStu540 {
             throw new Error('setImage: invalid imageData');
         }
 
+        // check if we are already sending data at this moment
+        let tryCnt = 0;
+        while (this.#deviceIsSending) {
+            if (tryCnt < 20) {
+                tryCnt++;
+                await this.#wait(500);
+            } else {
+                throw new Error('cannot setImage: sending blocked for more than 10 seconds by other calls');
+            }
+        }
+        this.#deviceIsSending = true;
+
         const imageDataBulks = this.#splitToBulks(imageData, this.#config.chunkSize);
 
         //Only 24BGR is supported now, send start packet, then chunked data packets, then end packet
@@ -574,6 +632,8 @@ class WacomStu540 {
 
         // clear current signature path
         this.#clearSignatureData();
+
+        this.#deviceIsSending = false;
     }
 
     // -------------------------------------------------
@@ -733,6 +793,8 @@ class WacomStu540 {
         this.#svgPolyLine.setAttribute('fill', 'none');
         this.#svgPolyLine.setAttribute('stroke', 'rgb(' + this.#config.penColor.join(',') + ')');
         this.#svgPolyLine.setAttribute('stroke-width', strokeWidth);
+        this.#svgPolyLine.setAttribute('stroke-linecap', 'round');
+        this.#svgPolyLine.setAttribute('stroke-linejoin', 'round');
         this.#svgElement.append(this.#svgPolyLine);
     }
 
@@ -828,5 +890,14 @@ class WacomStu540 {
         }
 
         return text;
+    }
+
+    /**
+     * Helper Function to wait
+     * @param {Number} ms
+     * @returns {Promise}
+     */
+    #wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
