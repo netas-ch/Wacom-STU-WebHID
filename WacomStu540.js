@@ -53,7 +53,12 @@ class WacomStu540 {
 
             inkMode             : null,
             writingMode         : null,
-            writingArea         : null, // [x1, x2
+            writingArea         : null, // [x1, x2]
+
+            outputWidth         : null,
+            outputHeight        : null,
+            outputOffsetX       : null,
+            outputOffsetY       : null,
 
             deviceName          : null,
             firmware            : null,
@@ -275,13 +280,28 @@ class WacomStu540 {
         dv = await this.#readData(this.#command.writingArea);
         this.#config.writingArea = [dv.getUint16(1, true), dv.getUint16(3, true), dv.getUint16(5, true), dv.getUint16(7, true)];
 
-        // set the svg viewbox to width & height
         this.#svgElement.setAttribute('version', '2.0');
-        this.#svgElement.setAttribute('viewBox', '0 0 ' + this.#config.width + ' ' + this.#config.height);
-        this.#svgElement.setAttribute('width', this.#config.width + 'px');
-        this.#svgElement.setAttribute('height', this.#config.height + 'px');
+
+        // set the svg viewbox to width & height
+        let w = this.getOutputSize().width, h = this.getOutputSize().height;
+        this.#svgElement.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+        this.#svgElement.setAttribute('width', w + 'px');
+        this.#svgElement.setAttribute('height', h + 'px');
 
         return true;
+    }
+
+    /**
+     * returns the size of the output svg element
+     * @returns {Object}
+     */
+    getOutputSize() {
+        return {
+            width: this.#config.outputWidth === null ? this.#config.width : this.#config.outputWidth,
+            height: this.#config.outputHeight === null ? this.#config.height : this.#config.outputHeight,
+            offsetX: this.#config.outputOffsetX,
+            offsetY: this.#config.outputOffsetY
+        };
     }
 
     /**
@@ -400,6 +420,28 @@ class WacomStu540 {
         } else {
             return this.#signaturePath.length > 0;
         }
+    }
+
+    /**
+     * Set the size of the output svg element.
+     * set null will set the size to the screen size of your device.
+     * @param {null|Number} width
+     * @param {null|Number} height
+     * @param {Number} offsetX
+     * @param {Number} offsetY
+     * @returns {undefined}
+     */
+    setOutputSize(width=null, height=null, offsetX=0, offsetY=0) {
+        this.#config.outputWidth   = width;
+        this.#config.outputHeight  = height;
+        this.#config.outputOffsetX = parseInt(offsetX);
+        this.#config.outputOffsetY = parseInt(offsetY);
+
+        let w = width === null ? this.#config.width : width,
+            h = height === null ? this.#config.height : height;
+        this.#svgElement.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+        this.#svgElement.setAttribute('width', w + 'px');
+        this.#svgElement.setAttribute('height', h + 'px');
     }
 
     /**
@@ -555,15 +597,25 @@ class WacomStu540 {
     /**
      * send a canvas to the pad. the canvas should have the dimension of the pad.
      * @param {CanvasRenderingContext2D} ctx Canvas 2D
-     * @param {Number} offsetX offset to read the image data
-     * @param {Number} offsetY offset to read the image data
      * @param {Boolean} drawToSvg draw image do svg
      * @returns {Promise}
      */
-    async setCanvas(ctx, offsetX=0, offsetY=0, drawToSvg=true) {
+    async setCanvas(ctx, drawToSvg=true) {
+        let outputSize = this.getOutputSize();
+
+        if (outputSize.width !== ctx.canvas.width || outputSize.height !== ctx.canvas.height) {
+            console.warn('setCanvas(): provided canvas has not the same size as the output area.');
+        }
+
+        if (this.#config.width + this.#config.outputOffsetX > ctx.canvas.width) {
+            throw new Error('setCanvas(): canvas is too small');
+        }
+        if (this.#config.height + this.#config.outputOffsetY > ctx.canvas.height) {
+            throw new Error('setCanvas(): canvas is too small');
+        }
 
         //Obtain image pixels
-        let imageData = ctx.getImageData(offsetX, offsetY, this.#config.width, this.#config.height);
+        let imageData = ctx.getImageData(this.#config.outputOffsetX, this.#config.outputOffsetY, this.#config.width, this.#config.height);
 
         //Remap pixels to BGR 24bpp
         const rgb24 = new Uint8Array((imageData.data.length / 4) * 3);
@@ -577,13 +629,22 @@ class WacomStu540 {
             i += 4;
         }
 
-        // get image as data url to paint after to the canvas
-        let dataUrl = drawToSvg ? ctx.canvas.toDataURL() : null;
+        // get image as object url to paint afterwards to the canvas
+        let dataUrl = null;
+
+        if (drawToSvg && ctx.canvas) {
+            if (ctx.canvas.toDataURL) { // HTMLCanvasElement
+                dataUrl = ctx.canvas.toDataURL();
+
+            } else if (ctx.canvas.convertToBlob) { // OffscreenCanvas
+                dataUrl = await this.#blobToDataURL(await ctx.canvas.convertToBlob());
+            }
+        }
 
         await this.setImage(rgb24);
 
         // draw image to svg
-        if (drawToSvg) {
+        if (dataUrl) {
             let svgImage = document.createElementNS("http://www.w3.org/2000/svg", "image");
             svgImage.setAttribute('x', 0);
             svgImage.setAttribute('y', 0);
@@ -729,12 +790,12 @@ class WacomStu540 {
 
                 // if the pressure difference is high, we start a new polyline with different stroke-width
                 } else if (prevPoint && (Math.abs(point.cpress - prevPoint.cpress) > 0.02)) {
-                    this.#addPolyPoint(point.cx, point.cy);
+                    this.#addPolyPoint(point.cx + this.#config.outputOffsetX, point.cy + this.#config.outputOffsetY);
                     this.#startPolyLine();
                 }
 
                 // add this point
-                this.#addPolyPoint(point.cx, point.cy);
+                this.#addPolyPoint(point.cx + this.#config.outputOffsetX, point.cy + this.#config.outputOffsetY);
 
             // finish line
             } else if (this.#svgPolyLine) {
@@ -899,5 +960,20 @@ class WacomStu540 {
      */
     #wait(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * create a data URL from a blob
+     * @param {Blob} blob
+     * @returns {Promise}
+     */
+    #blobToDataURL(blob) {
+        return new Promise((resolve, reject) => {
+            const a = new FileReader();
+            a.onload = (e) => { resolve(e.target.result); };
+            a.onerror = (e) => { reject(e.target.error); };
+            a.onabort = () => { reject(new Error('read aborted')); };
+            a.readAsDataURL(blob);
+        });
     }
 }
